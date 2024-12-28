@@ -1,5 +1,5 @@
-int FL_pwm = 5; int FR_pwm = 9; int RL_pwm = 11; RR_pwm =3;
-int FL_dir = 6; int FR_dir = 10; int RL_dir = 12; RR_dir =4;
+int FL_pwm = 2; int FR_pwm = 4; int RL_pwm = 8; int RR_pwm =6;
+int FL_dir = 3; int FR_dir = 5; int RL_dir = 9; int RR_dir =7; int motorSpeed = 100;
 void setup(){
   pinMode(FL_dir, OUTPUT);
   pinMode(FL_pwm, OUTPUT);
@@ -10,7 +10,32 @@ void setup(){
   pinMode(RL_dir, OUTPUT);
   pinMode(RL_pwm, OUTPUT);
 }
-
+void loop(){
+  // forward();
+  // delay(5000);
+  // stop();
+  // delay(2000);
+  // right();
+  // delay(5000);
+  // stop();
+  // delay(2000);
+  // reverse();
+  // delay(5000);
+  // stop();
+  // delay(2000);
+  // left();
+  // delay(5000);
+  // stop();
+  // delay(2000);
+  anticlockwise();
+  delay(5000);
+  stop();
+  delay(2000);
+  clockwise();
+  delay(5000);
+  stop();
+  delay(2000);
+}
 void forward(){
 digitalWrite(FL_dir,1);
 analogWrite(FL_pwm, motorSpeed);
@@ -56,14 +81,10 @@ analogWrite(RL_pwm, motorSpeed);
 Serial.println("left");
 }
 void stop(){
-digitalWrite(FL_dir,0);
-analogWrite(FL_pwm, motorSpeed);
-digitalWrite(FR_dir,0);
-analogWrite(FR_pwm, motorSpeed);
-digitalWrite(RR_dir,0);
-analogWrite(RR_pwm, motorSpeed);
-digitalWrite(RL_dir,0);
-analogWrite(RL_pwm, motorSpeed);
+analogWrite(FL_pwm, 0);
+analogWrite(FR_pwm, 0);
+analogWrite(RR_pwm, 0);
+analogWrite(RL_pwm, 0);
 Serial.println("stop");
 }
 void clockwise() {
@@ -88,7 +109,3 @@ void anticlockwise() {
   analogWrite(RL_pwm, motorSpeed);
   Serial.println("anticlockwise");
 }
-
-
-
-
