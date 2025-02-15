@@ -1,0 +1,123 @@
+f#include <Wire.h>
+#include <SparkFun_BNO080_Arduino_Library.h>
+
+BNO080 myIMU;  
+
+int m1 = 8, m2 = 10, m3 = 6, m4 = 12;  // pwm
+int M1 = 9, M2 = 11, M3 = 7, M4 = 13;  // dir/
+int Ms = 50;  
+
+#define ENC_XA 2
+#define ENC_XB 3
+#define ENC_YA 18
+#define ENC_YB 19
+
+float initialYaw = 0;
+float targetYaw = 0;
+float kp_yaw = 0.99;
+float kd_yaw = 0.5;
+float lastYawError = 0;
+float YawCorrection = 0;
+
+volatile long corX = 0, corY = 0;
+
+void setup() {
+    Serial.begin(115200);
+    while (!Serial);
+    Serial.println("Starting setup...");
+    Wire.begin();
+
+    if (!myIMU.begin(0x4A)) {
+        Serial.println("BNO085 not detected. Check wiring or I2C address.");
+        while (1);
+    }
+
+    Serial.println("BNO085 detected!");
+    myIMU.enableRotationVector(100);  
+    delay(1000);
+
+    float sumYaw = 0;
+    int validReadings = 0;
+
+    for (int i = 0; i < 50; i++) { 
+        if (myIMU.dataAvailable()) {
+            sumYaw += getYaw();
+            validReadings++;
+        }
+        delay(10);
+    }
+
+    if (validReadings > 0) {
+        initialYaw = sumYaw / validReadings;
+        Serial.print("Initial Yaw: ");
+        Serial.println(initialYaw, 2);
+    } else {
+        Serial.println("Failed to get initial yaw.");
+    }
+
+    targetYaw = getYaw(); 
+
+    pinMode(ENC_XA, INPUT);  pinMode(ENC_YA, INPUT);
+    pinMode(ENC_XB, INPUT);  pinMode(ENC_YB, INPUT);
+    attachInterrupt(digitalPinToInterrupt(ENC_XA), countX, RISING);
+    attachInterrupt(digitalPinToInterrupt(ENC_YA), countY, RISING);
+
+    pinMode(M1, OUTPUT); pinMode(m1, OUTPUT);
+    pinMode(M2, OUTPUT); pinMode(m2, OUTPUT);
+    pinMode(M3, OUTPUT); pinMode(m3, OUTPUT);
+    pinMode(M4, OUTPUT); pinMode(m4, OUTPUT);
+}
+
+void loop() {
+    if (myIMU.dataAvailable()) {  
+        float currentYaw = getYaw();
+        float yawError = targetYaw - currentYaw;
+        YawCorrection = kp_yaw * yawError + kd_yaw * (yawError - lastYawError);
+        lastYawError = yawError;
+        motors(YawCorrection);  
+        delay(3000);
+        // stop();
+        // delay(5000);
+    }
+}
+float getYaw() {
+    float qw = myIMU.getQuatReal();
+    float qx = myIMU.getQuatI();
+    float qy = myIMU.getQuatJ();
+    float qz = myIMU.getQuatK();
+
+    float yaw = atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz));
+    yaw = yaw * 180.0 / PI;
+
+    return yaw;
+}
+
+void countX() { corX++; }
+void countY() { corY++; }
+
+void motors(float yawCorrection) {
+    int speed_FL = Ms - yawCorrection;
+    int speed_FR = Ms + yawCorrection;
+    int speed_BL = Ms - yawCorrection;
+    int speed_BR = Ms + yawCorrection;
+
+    speed_FL = constrain(speed_FL, 0, 100);
+    speed_FR = constrain(speed_FR, 0, 100);
+    speed_BL = constrain(speed_BL, 0, 100);
+    speed_BR = constrain(speed_BR, 0, 100);
+
+    analogWrite(m1, speed_FL); digitalWrite(M1, 1);
+    analogWrite(m2, speed_FR); digitalWrite(M2, 1);
+    analogWrite(m3, speed_BL); digitalWrite(M3, 1);
+    analogWrite(m4, speed_BR); digitalWrite(M4, 1);
+}
+void stop() {
+ analogWrite(m1, 0); analogWrite(m2, 0);
+ analogWrite(m3, 0); analogWrite(m4, 0);
+}
+void forward(){
+  analogWrite(m1, speed_FL); digitalWrite(M1, 1);
+    analogWrite(m2, speed_FR); digitalWrite(M2, 1);
+    analogWrite(m3, speed_BL); digitalWrite(M3, 1);
+    analogWrite(m4, speed_BR); digitalWrite(M4, 1);
+}
