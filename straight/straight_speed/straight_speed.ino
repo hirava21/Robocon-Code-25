@@ -5,10 +5,18 @@ float initialYaw = 0; float adjustedYaw = 0;
 int BS = 100; int correctionFactor =60; //basically the speed at which the bot will move when error is seen 
 int FL_pwm = 8, FR_pwm = 10, RL_pwm = 6, RR_pwm = 12;
 int FL_dir = 9, FR_dir = 11, RL_dir = 7, RR_dir = 13;
+float kp = 2.0; 
+float ki = 0.0;  
+float kd = 1.0; 
+
+float previousError = 0;
+float integral = 0;
+float lastTime = 0;
+
 void setup() {
   Serial.begin(115200);
   while (!Serial); 
-  Serial.println("Starting setup...");
+  Serial.println("Starting setup..."); 
   Wire.begin();
   if (myIMU.begin(0x4A) == false) {
     Serial.println("BNO085 not detected. Check your wiring or I2C address.");
@@ -48,47 +56,51 @@ void setup() {
   pinMode(FL_pwm, OUTPUT); pinMode(FL_dir, OUTPUT);
 }
 void loop() {
-  // forward(30,30);
-  // delay(2000);
-  // stop();
-  // delay(100000000000000);
-  if (myIMU.dataAvailable() == true) {
+  if (myIMU.dataAvailable()) {
     // Read the quaternion data
     float qw = myIMU.getQuatReal();
     float qx = myIMU.getQuatI();
     float qy = myIMU.getQuatJ();
     float qz = myIMU.getQuatK();
+
+    // Convert quaternion to yaw angle
     float yaw = atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz));
     yaw = yaw * 180.0 / PI;
+    
+    // Adjust yaw based on initial reading
     float adjustedYaw = yaw - initialYaw;
-    if (adjustedYaw > 180) {
-      adjustedYaw -= 360;
-    } else if (adjustedYaw < -180) {
-      adjustedYaw += 360;
-    }
+    if (adjustedYaw > 180) adjustedYaw -= 360;
+    if (adjustedYaw < -180) adjustedYaw += 360;
+
     Serial.print("Adjusted Yaw: ");
     Serial.println(adjustedYaw, 2);
-  if (adjustedYaw > -5 && adjustedYaw < 5) {
-    Serial.println("Moving Straight");
-    forward(BS, BS);
-  } 
-  else if (adjustedYaw >= 5 && adjustedYaw < 10) {
-    Serial.println("Correcting Right (Slow down Right)");
-    forward(BS, BS - correctionFactor);
-  } 
-  else if (adjustedYaw <= -5 && adjustedYaw > -10) {
-    Serial.println("Correcting Left (Slow down Left)");
-    forward(BS - correctionFactor, BS);
-  } 
-  else if (adjustedYaw >= 10) {
-    Serial.println("Turning Clockwise");
-    clockwise();
-  } 
-  else if (adjustedYaw <= -10) {
-    Serial.println("Turning Anticlockwise");
-    anticlockwise();
+
+    // Calculate PID correction
+    float currentTime = millis();
+    float deltaTime = (currentTime - lastTime) / 1000.0;  // Convert to seconds
+    lastTime = currentTime;
+
+    float error = -adjustedYaw;  // Negative because we need to correct the deviation
+    integral += error * deltaTime;
+    float derivative = (error - previousError) / deltaTime;
+    previousError = error;
+
+    float correction = (kp * error) + (ki * integral) + (kd * derivative);
+    
+    // Limit correction to prevent excessive speed changes
+    correction = constrain(correction, -BS, BS);
+
+    // Adjust motor speeds using PID correction
+    float leftSpeed = BS - correction;
+    float rightSpeed = BS + correction;
+
+    // Ensure speed values are within valid range
+    leftSpeed = constrain(leftSpeed, 0, 255);
+    rightSpeed = constrain(rightSpeed, 0, 255);
+
+    // Move forward with corrected speeds
+    forward(leftSpeed, rightSpeed);
   }
-}
 }
 void forward(int LS, int RS) {
   digitalWrite(FL_dir, 1);
