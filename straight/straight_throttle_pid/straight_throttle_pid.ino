@@ -1,4 +1,6 @@
 #include <PID_v1.h>
+#include <SparkFun_BNO080_Arduino_Library.h>
+BNO080 myIMU;
 int PWM1 = 8, DIR1 = 9;  int PWM2 = 10, DIR2 = 11;  
 int PWM3 = 12, DIR3 = 13;int PWM4 = 6, DIR4 = 7;  
 int motorSpeed = 0;
@@ -14,11 +16,51 @@ PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
 void setup() {
     Serial.begin(115200);
     Serial3.begin(9600);
+    Serial.begin(115200);
+  while (!Serial);
 
+  Serial.println("Starting setup...");
+  Wire.begin();
+
+  if (myIMU.begin(0x4A) == false) {
+    Serial.println("BNO085 not detected. Check your wiring or I2C address.");
+    while (1);
+  }
+
+  Serial.println("BNO085 detected!");
+  myIMU.enableRotationVector(100);
+  delay(1000);
+
+  // Calculate initial yaw
+  float sumYaw = 0;
+  int validReadings = 0;
+  for (int i = 0; i < 100; i++) {
+    if (myIMU.dataAvailable()) {
+      float qw = myIMU.getQuatReal();
+      float qx = myIMU.getQuatI();
+      float qy = myIMU.getQuatJ();
+      float qz = myIMU.getQuatK();
+
+      float yaw = atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz));
+      yaw = yaw * 180.0 / PI;
+
+      sumYaw += yaw;
+      validReadings++;
+    }
+    delay(10);
+  }
+  if (validReadings > 0) {
+    initialYaw = sumYaw / validReadings;
+    Serial.print("Initial Yaw: ");
+    Serial.println(initialYaw, 2);
+  } else {
+    Serial.println("Failed to get initial yaw.");
+  }
     pinMode(PWM1, OUTPUT); pinMode(DIR1, OUTPUT);
     pinMode(PWM2, OUTPUT); pinMode(DIR2, OUTPUT);
     pinMode(PWM3, OUTPUT); pinMode(DIR3, OUTPUT);
     pinMode(PWM4, OUTPUT); pinMode(DIR4, OUTPUT);
+    
 
     myPID.SetMode(AUTOMATIC);
     myPID.SetOutputLimits(-150, 150);  // Limit motor speed changes
@@ -57,21 +99,20 @@ float calculateTargetAngle(int throttle, int brake, float max_angular_speed) {
 }
 
 void js() {
-    if (Serial3.available() > 0) {
-        String data = Serial3.readStringUntil('\n');
-        int delimiter1 = data.indexOf(',');
-        int delimiter2 = data.indexOf(',', delimiter1 + 1);
-        int delimiter3 = data.indexOf(',', delimiter2 + 1);
-        int delimiter4 = data.indexOf(',', delimiter3 + 1);
-
-        if (delimiter1 != -1 && delimiter4 != -1) {
-            int axisY = data.substring(0, delimiter1).toInt();
-            int axisX = data.substring(delimiter1 + 1, delimiter2).toInt();
-            int throttle = data.substring(delimiter3 + 1, delimiter4).toInt();
-            int brake = data.substring(delimiter4 + 1).toInt();
-            target_angle = calculateTargetAngle(throttle, brake, 180.0);
-            Serial.print("Target Angle: ");
-            Serial.println(target_angle);
+if (Serial3.available() > 0) {
+   String data = Serial3.readStringUntil('\n');
+   int delimiter1 = data.indexOf(',');
+   int delimiter2 = data.indexOf(',', delimiter1 + 1);
+   int delimiter3 = data.indexOf(',', delimiter2 + 1);
+   int delimiter4 = data.indexOf(',', delimiter3 + 1);
+   if (delimiter1 != -1 && delimiter4 != -1) {
+   int axisY = data.substring(0, delimiter1).toInt();
+   int axisX = data.substring(delimiter1 + 1, delimiter2).toInt();
+   int throttle = data.substring(delimiter3 + 1, delimiter4).toInt();
+   int brake = data.substring(delimiter4 + 1).toInt();
+   target_angle = calculateTargetAngle(throttle, brake, 180.0);
+   Serial.print("Target Angle: ");
+   Serial.println(target_angle);
 
         if (axisY <= -25) {
          motorSpeed = map(axisY, -25, -512, 0, 150);
